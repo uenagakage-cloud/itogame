@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ito オンライン</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>ito <span>online</span></h1>
+    <div id="roomInfo" class="hidden">
+      部屋コード <b id="roomCode"></b>
+      <button id="copyLink" class="small">招待リンクをコピー</button>
+      <button id="leaveBtn" class="small ghost">退出</button>
+    </div>
+  </header>
+
+  <!-- トップ画面 -->
+  <main id="home" class="screen">
+    <section class="card narrow">
+      <h2>みんなで協力して、数字を小さい順に並べよう</h2>
+      <p class="muted">
+        1〜100のカードが配られます。数字は言わずに、お題に沿った「たとえ」で自分の数字の大きさを伝え合い、
+        小さい順にカードを出せたら成功！
+      </p>
+      <label>名前 <input id="nameInput" maxlength="16" placeholder="あなたの名前" /></label>
+      <button id="createBtn" class="primary">部屋を作る</button>
+      <div class="divider">または</div>
+      <label>部屋コード <input id="codeInput" maxlength="4" placeholder="ABCD" style="text-transform:uppercase" /></label>
+      <button id="joinBtn">部屋に参加</button>
+    </section>
+  </main>
+
+  <!-- ゲーム画面 -->
+  <main id="game" class="screen hidden">
+    <div class="layout">
+      <div class="main-col">
+        <section class="card status">
+          <div><span class="label">レベル</span> <b id="level">1</b></div>
+          <div><span class="label">ライフ</span> <b id="lives"></b></div>
+          <div><span class="label">フェーズ</span> <b id="phase"></b></div>
+        </section>
+
+        <!-- ロビー -->
+        <section id="lobbyPanel" class="card hidden">
+          <h2>ロビー</h2>
+          <p class="muted">友達に部屋コードか招待リンクを送ってね（2〜10人）</p>
+          <div id="settings">
+            <label>ライフ <input id="setLives" type="number" min="1" max="10" /></label>
+            <label>1人あたりのカード枚数 <input id="setCards" type="number" min="1" max="5" /></label>
+          </div>
+          <button id="startBtn" class="primary hostOnly">ゲーム開始</button>
+          <p class="muted guestOnly">ホストの開始を待っています…</p>
+        </section>
+
+        <!-- お題 -->
+        <section id="themePanel" class="card hidden">
+          <div class="label">お題</div>
+          <div id="theme" class="theme"></div>
+          <div class="hostOnly hintOnly row">
+            <button id="rerollBtn" class="small">別のお題にする</button>
+            <input id="customTheme" placeholder="自由にお題を入力" maxlength="60" />
+            <button id="customThemeBtn" class="small">設定</button>
+          </div>
+        </section>
+
+        <!-- 自分の手札 -->
+        <section id="handPanel" class="card hidden">
+          <div class="label">あなたのカード <span class="muted" id="handHelp"></span></div>
+          <div id="hand" class="hand"></div>
+          <div class="row">
+            <input id="hintInput" maxlength="40" placeholder="お題に沿ったたとえを入力 (例: ライオン)" />
+            <button id="hintBtn">ヒントを送る</button>
+          </div>
+          <button id="beginPlayBtn" class="primary hostOnly hintOnly">全員ヒントOK → 並べ始める</button>
+        </section>
+
+        <!-- 場 -->
+        <section id="tablePanel" class="card hidden">
+          <div class="label">場に出たカード（左から小さい順）</div>
+          <div id="played" class="played"></div>
+          <div id="discardWrap" class="hidden">
+            <div class="label">失敗で捨てられたカード</div>
+            <div id="discarded" class="played"></div>
+          </div>
+        </section>
+
+        <!-- 結果 -->
+        <section id="resultPanel" class="card hidden">
+          <h2 id="resultTitle"></h2>
+          <div id="resultList"></div>
+          <div class="row hostOnly">
+            <button id="nextBtn" class="primary">次のレベルへ</button>
+            <button id="lobbyBtn">ロビーに戻る</button>
+          </div>
+          <p class="muted guestOnly">ホストの操作を待っています…</p>
+        </section>
+      </div>
+
+      <aside class="side-col">
+        <section class="card">
+          <div class="label">プレイヤー</div>
+          <ul id="players" class="players"></ul>
+        </section>
+        <section class="card">
+          <div class="label">チャット</div>
+          <div id="chat" class="chat"></div>
+          <form id="chatForm" class="row">
+            <input id="chatInput" maxlength="200" placeholder="メッセージ" autocomplete="off" />
+            <button>送信</button>
+          </form>
+        </section>
+        <section class="card">
+          <div class="label">ログ</div>
+          <ul id="log" class="log"></ul>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
