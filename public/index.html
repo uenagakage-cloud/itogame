@@ -19,11 +19,15 @@
   <!-- トップ画面 -->
   <main id="home" class="screen">
     <section class="card narrow">
-      <h2>みんなで協力して、数字を小さい順に並べよう</h2>
-      <p class="muted">
-        1〜100のカードが配られます。数字は言わずに、お題に沿った「たとえ」で自分の数字の大きさを伝え合い、
-        小さい順にカードを出せたら成功！
-      </p>
+      <h2>みんなで協力して、カードを小さい順に並べよう</h2>
+      <ol class="rules">
+        <li>1〜100 の数字カードが配られます。数字は<b>自分にしか見えません</b>。</li>
+        <li>お題に沿って、自分の数字の大きさを表す言葉をカードに<b>書き込みます</b>。<br />
+          <span class="muted">例: お題「動物の強さ」で 95 → 「ライオン」、5 → 「アリ」</span></li>
+        <li>他の人には、カードの裏面と書き込んだ言葉だけが見えます。</li>
+        <li>言葉を手がかりに、みんなでカードを<b>ドラッグして小さい順に並べ替え</b>ます。</li>
+        <li>全員が「この順番でOK」を押したら答え合わせ！</li>
+      </ol>
       <label>名前 <input id="nameInput" maxlength="16" placeholder="あなたの名前" /></label>
       <button id="createBtn" class="primary">部屋を作る</button>
       <div class="divider">または</div>
@@ -36,65 +40,50 @@
   <main id="game" class="screen hidden">
     <div class="layout">
       <div class="main-col">
-        <section class="card status">
-          <div><span class="label">レベル</span> <b id="level">1</b></div>
-          <div><span class="label">ライフ</span> <b id="lives"></b></div>
-          <div><span class="label">フェーズ</span> <b id="phase"></b></div>
-        </section>
-
         <!-- ロビー -->
         <section id="lobbyPanel" class="card hidden">
           <h2>ロビー</h2>
           <p class="muted">友達に部屋コードか招待リンクを送ってね（2〜10人）</p>
-          <div id="settings">
-            <label>ライフ <input id="setLives" type="number" min="1" max="10" /></label>
-            <label>1人あたりのカード枚数 <input id="setCards" type="number" min="1" max="5" /></label>
-          </div>
+          <label class="setting">1人あたりのカード枚数 <input id="setCards" type="number" min="1" max="5" /></label>
           <button id="startBtn" class="primary hostOnly">ゲーム開始</button>
           <p class="muted guestOnly">ホストの開始を待っています…</p>
         </section>
 
         <!-- お題 -->
         <section id="themePanel" class="card hidden">
-          <div class="label">お題</div>
-          <div id="theme" class="theme"></div>
-          <div class="hostOnly hintOnly row">
+          <div class="theme-head">
+            <div>
+              <div class="label">お題 <span id="roundInfo"></span></div>
+              <div id="theme" class="theme"></div>
+            </div>
+          </div>
+          <div class="hostOnly arrangeOnly row">
             <button id="rerollBtn" class="small">別のお題にする</button>
             <input id="customTheme" placeholder="自由にお題を入力" maxlength="60" />
             <button id="customThemeBtn" class="small">設定</button>
           </div>
         </section>
 
-        <!-- 自分の手札 -->
-        <section id="handPanel" class="card hidden">
-          <div class="label">あなたのカード <span class="muted" id="handHelp"></span></div>
-          <div id="hand" class="hand"></div>
-          <div class="row">
-            <input id="hintInput" maxlength="40" placeholder="お題に沿ったたとえを入力 (例: ライオン)" />
-            <button id="hintBtn">ヒントを送る</button>
-          </div>
-          <button id="beginPlayBtn" class="primary hostOnly hintOnly">全員ヒントOK → 並べ始める</button>
-        </section>
-
         <!-- 場 -->
         <section id="tablePanel" class="card hidden">
-          <div class="label">場に出たカード（左から小さい順）</div>
-          <div id="played" class="played"></div>
-          <div id="discardWrap" class="hidden">
-            <div class="label">失敗で捨てられたカード</div>
-            <div id="discarded" class="played"></div>
-          </div>
-        </section>
+          <div id="instruction" class="instruction"></div>
+          <div class="scale"><span>← 小さい (1)</span><span>大きい (100) →</span></div>
+          <div id="line" class="line"></div>
 
-        <!-- 結果 -->
-        <section id="resultPanel" class="card hidden">
-          <h2 id="resultTitle"></h2>
-          <div id="resultList"></div>
-          <div class="row hostOnly">
-            <button id="nextBtn" class="primary">次のレベルへ</button>
-            <button id="lobbyBtn">ロビーに戻る</button>
+          <div id="arrangeBar" class="arrange-bar">
+            <button id="readyBtn" class="primary">この順番でOK！</button>
+            <div id="readyInfo" class="muted"></div>
+            <button id="forceBtn" class="small ghost hostOnly">全員を待たずに答え合わせ</button>
           </div>
-          <p class="muted guestOnly">ホストの操作を待っています…</p>
+
+          <div id="resultBar" class="result-bar hidden">
+            <h2 id="resultTitle"></h2>
+            <div class="row hostOnly">
+              <button id="nextBtn" class="primary">次のラウンドへ</button>
+              <button id="lobbyBtn">ロビーに戻る</button>
+            </div>
+            <p class="muted guestOnly">ホストの操作を待っています…</p>
+          </div>
         </section>
       </div>
 
@@ -121,6 +110,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>

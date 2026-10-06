@@ -13,6 +13,8 @@ if (params.get('room')) $('codeInput').value = params.get('room').toUpperCase();
 
 let state = null;
 let currentRoom = sessionStorage.getItem('ito.room');
+let dragging = false;
+let prevRevealed = 0;
 
 function toast(msg) {
   const t = $('toast');
@@ -65,22 +67,46 @@ $('customThemeBtn').onclick = () => {
   socket.emit('customTheme', $('customTheme').value);
   $('customTheme').value = '';
 };
-$('hintBtn').onclick = () => socket.emit('setHint', $('hintInput').value);
-$('hintInput').addEventListener('keydown', (e) => e.key === 'Enter' && $('hintBtn').click());
-$('beginPlayBtn').onclick = () => socket.emit('beginPlay');
+$('setCards').addEventListener('change', () => socket.emit('updateSettings', { cardsPerPlayer: $('setCards').value }));
+$('readyBtn').onclick = () => {
+  const me = state.players.find((p) => p.id === playerId);
+  if (!me.ready) {
+    const blank = state.cards.some((c) => c.ownerId === playerId && !c.hint.trim());
+    if (blank && !confirm('まだカードに何も書いていません。このままOKにしますか？')) return;
+  }
+  socket.emit('setReady', !me.ready);
+};
+$('forceBtn').onclick = () => confirm('全員のOKを待たずに答え合わせしますか？') && socket.emit('forceReveal');
 $('nextBtn').onclick = () => socket.emit('nextRound');
 $('lobbyBtn').onclick = () => socket.emit('backToLobby');
-['setLives', 'setCards'].forEach((id) =>
-  $(id).addEventListener('change', () =>
-    socket.emit('updateSettings', { lives: $('setLives').value, cardsPerPlayer: $('setCards').value })
-  )
-);
 $('chatForm').onsubmit = (e) => {
   e.preventDefault();
   const v = $('chatInput').value.trim();
   if (v) socket.emit('chat', v);
   $('chatInput').value = '';
 };
+
+// カードの並べ替え（ドラッグ＆ドロップ、スマホのタッチにも対応）
+const sortable = Sortable.create($('line'), {
+  animation: 150,
+  filter: 'textarea',
+  preventOnFilter: false,
+  delay: 120,
+  delayOnTouchOnly: true,
+  onStart: () => (dragging = true),
+  onEnd: (evt) => {
+    dragging = false;
+    if (evt.oldIndex !== evt.newIndex) socket.emit('moveCard', { cardId: evt.item.dataset.id, toIndex: evt.newIndex });
+    else if (state) render();
+  },
+});
+
+// 書き込みは少し待ってからまとめて送る
+const hintTimers = {};
+function sendHint(cardId, hint) {
+  clearTimeout(hintTimers[cardId]);
+  hintTimers[cardId] = setTimeout(() => socket.emit('writeHint', { cardId, hint }), 350);
+}
 
 function goHome() {
   state = null;
@@ -110,22 +136,33 @@ socket.on('kicked', () => {
   goHome();
 });
 socket.on('state', (s) => {
-  const prevPhase = state && state.phase;
   state = s;
-  if (prevPhase !== s.phase && s.phase === 'hint') $('hintInput').value = '';
-  render();
+  if (!dragging) render();
 });
 
-const PHASE_LABEL = { lobby: 'ロビー', hint: 'ヒントを考える', play: 'カードを出す', result: '結果' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
-function cardEl(value, opts = {}) {
-  const el = document.createElement(opts.button ? 'button' : 'div');
-  el.className = 'num-card ' + (opts.cls || '');
-  el.innerHTML = `${opts.hint ? `<span class="hint">${esc(opts.hint)}</span>` : ''}${value}${
-    opts.who ? `<span class="who">${esc(opts.who)}</span>` : ''
-  }`;
+function cardEl(c, i, s) {
+  const el = document.createElement('div');
+  el.dataset.id = c.id;
+  const mine = c.ownerId === playerId;
+  const open = i < s.revealed;
+  const arrange = s.phase === 'arrange';
+  el.className = 'icard ' + (open ? `open ${c.ok ? 'ok' : 'ng'}` : mine ? 'front' : 'back');
+  if (arrange) el.classList.add('draggable');
+  if (open && i >= prevRevealed) el.classList.add('flip');
+
+  const owner = `<div class="owner">${mine ? 'あなた' : esc(c.ownerName)}</div>`;
+  const num = `<div class="num">${c.value ?? '?'}</div>`;
+  let words;
+  if (mine && arrange) {
+    words = `<textarea data-card="${c.id}" maxlength="30" placeholder="ここに書き込む&#10;(お題に沿った言葉)">${esc(c.hint)}</textarea>`;
+  } else {
+    words = c.hint ? `<div class="words">${esc(c.hint)}</div>` : `<div class="words empty">（まだ書いていません）</div>`;
+  }
+  const mark = open ? `<div class="mark">${c.ok ? '✔' : '✘'}</div>` : '';
+  el.innerHTML = owner + num + words + mark;
   return el;
 }
 
@@ -139,89 +176,81 @@ function render() {
   $('roomInfo').classList.remove('hidden');
   $('roomCode').textContent = s.code;
 
-  $('level').textContent = s.level;
-  $('lives').textContent = s.phase === 'lobby' ? '♥'.repeat(s.settings.lives) : '♥'.repeat(Math.max(0, s.lives)) + '♡'.repeat(Math.max(0, s.settings.lives - s.lives));
-  $('phase').textContent = PHASE_LABEL[s.phase];
-
   document.querySelectorAll('.hostOnly').forEach((el) => el.classList.toggle('hidden', !host));
   document.querySelectorAll('.guestOnly').forEach((el) => el.classList.toggle('hidden', host));
-  if (host) document.querySelectorAll('.hintOnly').forEach((el) => el.classList.toggle('hidden', s.phase !== 'hint'));
+  if (host) document.querySelectorAll('.arrangeOnly').forEach((el) => el.classList.toggle('hidden', s.phase !== 'arrange'));
 
   show('lobbyPanel', s.phase === 'lobby');
   show('themePanel', s.phase !== 'lobby');
-  show('handPanel', s.phase === 'hint' || s.phase === 'play');
-  show('tablePanel', s.phase === 'play' || s.phase === 'result');
-  show('resultPanel', s.phase === 'result');
+  show('tablePanel', s.phase !== 'lobby');
+  show('arrangeBar', s.phase === 'arrange');
+  show('resultBar', s.phase === 'result');
 
-  // ロビー設定
-  $('setLives').value = s.settings.lives;
+  // ロビー
   $('setCards').value = s.settings.cardsPerPlayer;
-  $('setLives').disabled = $('setCards').disabled = !host;
+  $('setCards').disabled = !host;
   $('startBtn').disabled = s.players.length < 2;
 
+  // お題
   $('theme').textContent = s.theme || '';
+  $('roundInfo').textContent = s.round ? `（第${s.round}ラウンド・成功 ${s.wins}回）` : '';
 
-  // 手札
-  const hand = $('hand');
-  hand.innerHTML = '';
-  if (me && me.cards) {
-    me.cards.forEach((v) => {
-      const playable = s.phase === 'play';
-      const el = cardEl(v, { button: playable, cls: playable ? 'playable' : '' });
-      if (playable) {
-        el.onclick = () => {
-          if (confirm(`${v} を場に出しますか？`)) socket.emit('playCard', v);
-        };
-      }
-      hand.appendChild(el);
-    });
-    if (me.cards.length === 0) hand.innerHTML = '<span class="muted">手札はありません</span>';
+  // 説明
+  const instr = {
+    arrange:
+      '① 自分のカード（オレンジ）に、お題に沿って自分の数字の大きさを表す言葉を書き込もう。<br>' +
+      '② みんなの言葉を見ながら、カードをドラッグして<b>左から小さい順</b>に並べ替えよう（誰のカードでも動かせます）。<br>' +
+      '③ 並びに納得したら「この順番でOK！」。全員OKで答え合わせ！',
+    reveal: '答え合わせ中… 左から1枚ずつめくります',
+    result: '',
+  };
+  $('instruction').innerHTML = instr[s.phase] || '';
+  show('instruction', !!instr[s.phase]);
+
+  // 書き込み中のカードはフォーカスと入力内容を保つ
+  const active = document.activeElement;
+  let keep = null;
+  if (active && active.dataset && active.dataset.card) {
+    keep = { id: active.dataset.card, value: active.value, start: active.selectionStart, end: active.selectionEnd };
   }
-  $('handHelp').textContent =
-    s.phase === 'hint'
-      ? '— 数字は言わずに、お題に沿ったたとえを考えよう'
-      : s.phase === 'play'
-      ? '— 自分が一番小さいと思ったらクリックして出そう'
-      : '';
-  if (me && document.activeElement !== $('hintInput') && !$('hintInput').value) $('hintInput').value = me.hint || '';
 
-  // 場
-  const played = $('played');
-  played.innerHTML = '';
-  s.played.forEach((c) => played.appendChild(cardEl(c.value, { cls: c.ok ? 'ok' : 'ng', who: c.name, hint: c.hint })));
-  if (s.played.length === 0) played.innerHTML = '<span class="muted">まだカードは出ていません</span>';
-  show('discardWrap', s.discarded.length > 0);
-  const disc = $('discarded');
-  disc.innerHTML = '';
-  s.discarded.forEach((c) => disc.appendChild(cardEl(c.value, { cls: 'discard', who: c.name, hint: c.hint })));
+  const line = $('line');
+  line.innerHTML = '';
+  s.cards.forEach((c, i) => line.appendChild(cardEl(c, i, s)));
+  sortable.option('disabled', s.phase !== 'arrange');
+
+  line.querySelectorAll('textarea[data-card]').forEach((ta) => {
+    ta.addEventListener('input', () => sendHint(ta.dataset.card, ta.value));
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        ta.blur();
+      }
+    });
+    if (keep && keep.id === ta.dataset.card) {
+      ta.value = keep.value;
+      ta.focus();
+      ta.setSelectionRange(keep.start, keep.end);
+    }
+  });
+  prevRevealed = s.revealed;
+
+  // OKボタン
+  if (s.phase === 'arrange' && me) {
+    const btn = $('readyBtn');
+    btn.textContent = me.ready ? 'OK済み（押すと取り消し）' : 'この順番でOK！';
+    btn.classList.toggle('done', me.ready);
+    const active = s.players.filter((p) => p.connected);
+    const waiting = active.filter((p) => !p.ready).map((p) => p.name);
+    $('readyInfo').textContent = `OK ${active.length - waiting.length} / ${active.length}人` + (waiting.length ? `（待ち: ${waiting.join('、')}）` : '');
+  }
 
   // 結果
   if (s.phase === 'result') {
     const t = $('resultTitle');
-    const map = {
-      clear: ['パーフェクト！ レベルクリア 🎉', 'clear'],
-      partial: ['レベルクリア！（ミスあり）', 'clear'],
-      gameover: ['ゲームオーバー…', 'fail'],
-    };
-    const [text, cls] = map[s.result] || ['', ''];
-    t.textContent = text;
-    t.className = cls;
-    const all = [
-      ...s.played.map((c) => ({ ...c, kind: c.ok ? '✔' : '✘' })),
-      ...s.discarded.map((c) => ({ ...c, kind: '捨' })),
-      ...s.players.flatMap((p) => (p.cards || []).map((v) => ({ value: v, name: p.name, hint: p.hint, kind: '残' }))),
-    ].sort((a, b) => a.value - b.value);
-    $('resultList').innerHTML =
-      '<div class="label">正しい順番</div>' +
-      all
-        .map(
-          (c) =>
-            `<div class="result-row"><span class="n">${c.value}</span><span>${esc(c.name)}</span><span class="muted">${esc(
-              c.hint || ''
-            )}</span><span>${c.kind}</span></div>`
-        )
-        .join('');
-    $('nextBtn').classList.toggle('hidden', s.result === 'gameover');
+    const miss = s.cards.filter((c) => !c.ok).length;
+    t.textContent = s.result === 'success' ? '大成功！ 全部小さい順に並んでいました 🎉' : `残念… 順番ミスが ${miss} 枚ありました`;
+    t.className = s.result;
   }
 
   // プレイヤー
@@ -229,20 +258,17 @@ function render() {
   ul.innerHTML = '';
   s.players.forEach((p) => {
     const li = document.createElement('li');
-    li.innerHTML = `<div class="pname ${p.connected ? '' : 'offline'}">
-        ${esc(p.name)}
+    li.innerHTML = `<span class="${p.connected ? '' : 'offline'}">${esc(p.name)}</span>
         ${p.id === s.hostId ? '<span class="badge">ホスト</span>' : ''}
         ${p.id === playerId ? '<span class="badge me">あなた</span>' : ''}
-        ${p.connected ? '' : '<span class="muted">(切断)</span>'}
-        ${s.phase !== 'lobby' ? `<span class="muted">残り${p.cardCount}枚</span>` : ''}
-      </div>
-      ${p.hint ? `<div class="phint">「${esc(p.hint)}」</div>` : ''}`;
+        ${s.phase === 'arrange' && p.ready ? '<span class="badge ready">OK</span>' : ''}
+        ${p.connected ? '' : '<span class="muted">(切断)</span>'}`;
     if (host && p.id !== playerId) {
       const b = document.createElement('button');
       b.className = 'kick small ghost';
       b.textContent = '外す';
       b.onclick = () => confirm(`${p.name} を外しますか？`) && socket.emit('kick', p.id);
-      li.querySelector('.pname').appendChild(b);
+      li.appendChild(b);
     }
     ul.appendChild(li);
   });

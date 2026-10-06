@@ -8,6 +8,8 @@
   --ok: #2a9d5c;
   --ng: #d1495b;
   --border: #e3ddd0;
+  --back1: #2b3a67;
+  --back2: #496a81;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -39,7 +41,7 @@ header h1 { margin: 0; font-size: 1.5rem; color: var(--accent); }
 header h1 span { color: var(--accent2); font-weight: 400; font-size: 1rem; }
 #roomCode { font-size: 1.2rem; letter-spacing: 2px; margin: 0 6px; }
 .hidden { display: none !important; }
-.screen { padding: 16px; max-width: 1100px; margin: 0 auto; }
+.screen { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -47,12 +49,14 @@ header h1 span { color: var(--accent2); font-weight: 400; font-size: 1rem; }
   padding: 16px;
   margin-bottom: 14px;
 }
-.narrow { max-width: 460px; margin: 30px auto; }
-.narrow label, #settings label { display: block; margin: 10px 0; }
+.narrow { max-width: 520px; margin: 20px auto; }
+.narrow label, .setting { display: block; margin: 10px 0; }
+.rules { padding-left: 1.3em; line-height: 1.6; font-size: 0.95rem; }
+.rules li { margin-bottom: 4px; }
 h2 { margin-top: 0; font-size: 1.15rem; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
-input {
+input, textarea {
   font: inherit;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -74,70 +78,148 @@ button {
 }
 button:hover { filter: brightness(0.95); }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); width: 100%; margin-top: 10px; }
+button.primary.done { background: var(--ok); border-color: var(--ok); }
 button.small { padding: 4px 10px; font-size: 0.85rem; }
 button.ghost { background: transparent; }
 button:disabled { opacity: 0.5; cursor: default; }
 .divider { text-align: center; color: var(--muted); margin: 14px 0 4px; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 
-.layout { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
-@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+.layout { display: grid; grid-template-columns: 1fr 280px; gap: 14px; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
 
-.status { display: flex; gap: 24px; flex-wrap: wrap; }
-.status b { font-size: 1.1rem; }
 .theme { font-size: 1.6rem; font-weight: 700; color: var(--accent2); }
+.instruction {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.scale { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
 
-.hand, .played { display: flex; flex-wrap: wrap; gap: 10px; min-height: 40px; }
-.num-card {
-  width: 72px;
-  height: 100px;
-  border-radius: 10px;
+/* カードの列 */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 190px;
+  padding: 12px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+}
+.icard {
+  width: 130px;
+  height: 180px;
+  border-radius: 12px;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: 1.8rem;
-  font-weight: 800;
-  background: linear-gradient(160deg, var(--accent), #f0a35e);
+  padding: 8px;
   color: #fff;
-  border: none;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  position: relative;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+  user-select: none;
+  touch-action: manipulation;
 }
-.num-card.playable { cursor: pointer; transition: transform .1s; }
-.num-card.playable:hover { transform: translateY(-4px); }
-.num-card .who {
+.icard.draggable { cursor: grab; }
+.icard .owner {
+  font-size: 0.72rem;
+  background: rgba(0,0,0,0.25);
+  border-radius: 6px;
+  padding: 1px 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icard .num { font-size: 2.6rem; font-weight: 800; line-height: 1.1; margin: 4px 0; }
+.icard .words {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+  word-break: break-all;
+  overflow: hidden;
+}
+.icard .words.empty { font-weight: 400; font-size: 0.8rem; opacity: 0.7; }
+.icard textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  padding: 4px 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(255,255,255,0.92);
+  color: #222;
+  border: none;
+  border-radius: 6px;
+}
+.icard textarea::placeholder { font-weight: 400; font-size: 0.75rem; }
+
+/* 自分のカード（表） */
+.icard.front { background: linear-gradient(160deg, var(--accent), #f0a35e); }
+/* 他人のカード（裏） */
+.icard.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 8px, transparent 8px 16px),
+    linear-gradient(160deg, var(--back1), var(--back2));
+}
+.icard.back .num { opacity: 0.25; }
+/* めくられたカード */
+.icard.open.ok { background: linear-gradient(160deg, var(--ok), #6cc58f); }
+.icard.open.ng { background: linear-gradient(160deg, var(--ng), #ef8a97); }
+.icard .mark {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ok);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.icard.ng .mark { color: var(--ng); }
+.icard .pos {
   position: absolute;
   bottom: 4px;
-  font-size: 0.65rem;
-  font-weight: 400;
-  max-width: 66px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.7rem;
+  opacity: 0.7;
 }
-.num-card .hint {
-  position: absolute;
-  top: 4px;
-  font-size: 0.6rem;
-  font-weight: 400;
-  max-width: 66px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.icard.flip { animation: flip 0.5s ease; }
+@keyframes flip {
+  0% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0); }
 }
-.num-card.ok { background: linear-gradient(160deg, var(--ok), #6cc58f); }
-.num-card.ng { background: linear-gradient(160deg, var(--ng), #ef8a97); }
-.num-card.discard { background: #888; }
+.sortable-ghost { opacity: 0.35; }
+.sortable-chosen { transform: scale(1.04); }
+
+.arrange-bar, .result-bar { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.arrange-bar .primary { max-width: 360px; }
+.result-bar h2 { margin: 6px 0; font-size: 1.4rem; }
+.result-bar .row { width: 100%; max-width: 420px; }
+.result-bar .row button { flex: 1; margin-top: 0; }
+#resultTitle.success { color: var(--ok); }
+#resultTitle.fail { color: var(--ng); }
 
 .players { list-style: none; padding: 0; margin: 0; }
-.players li { padding: 6px 0; border-bottom: 1px dashed var(--border); display: flex; flex-direction: column; gap: 2px; }
+.players li { padding: 6px 0; border-bottom: 1px dashed var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .players li:last-child { border-bottom: none; }
-.players .pname { display: flex; align-items: center; gap: 6px; }
-.players .phint { font-size: 0.9rem; color: var(--accent2); font-weight: 600; }
 .players .offline { opacity: 0.5; }
 .badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 6px; background: var(--accent2); color: #fff; }
 .badge.me { background: var(--accent); }
+.badge.ready { background: var(--ok); }
 .kick { margin-left: auto; padding: 0 6px; font-size: 0.75rem; }
 
 .chat { height: 180px; overflow-y: auto; font-size: 0.9rem; }
@@ -145,11 +227,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 .chat b { color: var(--accent2); }
 .log { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; color: var(--muted); max-height: 200px; overflow-y: auto; }
 .log li { margin-bottom: 4px; }
-
-#resultTitle.clear { color: var(--ok); }
-#resultTitle.fail { color: var(--ng); }
-.result-row { display: flex; gap: 10px; align-items: center; padding: 4px 0; }
-.result-row .n { font-weight: 800; width: 40px; text-align: right; }
 
 .toast {
   position: fixed;
@@ -163,4 +240,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   z-index: 10;
   max-width: 90vw;
 }
-#discardWrap { margin-top: 14px; }
+@media (max-width: 500px) {
+  .icard { width: 104px; height: 150px; }
+  .icard .num { font-size: 2rem; }
+}
