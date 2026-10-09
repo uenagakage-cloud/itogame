@@ -103,9 +103,12 @@ const sortable = Sortable.create($('line'), {
 
 // 書き込みは少し待ってからまとめて送る
 const hintTimers = {};
-function sendHint(cardId, hint) {
+function sendHint(cardId, hint, delay = 350) {
   clearTimeout(hintTimers[cardId]);
-  hintTimers[cardId] = setTimeout(() => socket.emit('writeHint', { cardId, hint }), 350);
+  hintTimers[cardId] = setTimeout(() => {
+    delete hintTimers[cardId];
+    socket.emit('writeHint', { cardId, hint });
+  }, delay);
 }
 
 function goHome() {
@@ -143,26 +146,65 @@ socket.on('state', (s) => {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
-function cardEl(c, i, s) {
-  const el = document.createElement('div');
-  el.dataset.id = c.id;
+// カードのDOMは使い回す（書き込み中のテキスト欄を作り直すと日本語変換が途切れるため）
+const cardEls = new Map(); // id -> { el, sig }
+
+function updateCard(c, i, s) {
   const mine = c.ownerId === playerId;
   const open = i < s.revealed;
-  const arrange = s.phase === 'arrange';
-  el.className = 'icard ' + (open ? `open ${c.ok ? 'ok' : 'ng'}` : mine ? 'front' : 'back');
-  if (arrange) el.classList.add('draggable');
-  if (open && i >= prevRevealed) el.classList.add('flip');
+  const editable = mine && s.phase === 'arrange';
+  const sig = JSON.stringify([c.ownerName, c.value, open, c.ok, editable, editable ? '' : c.hint, s.phase === 'arrange']);
 
-  const owner = `<div class="owner">${mine ? 'あなた' : esc(c.ownerName)}</div>`;
-  const num = `<div class="num">${c.value ?? '?'}</div>`;
-  let words;
-  if (mine && arrange) {
-    words = `<textarea data-card="${c.id}" maxlength="30" placeholder="ここに書き込む&#10;(お題に沿った言葉)">${esc(c.hint)}</textarea>`;
-  } else {
-    words = c.hint ? `<div class="words">${esc(c.hint)}</div>` : `<div class="words empty">（まだ書いていません）</div>`;
+  let entry = cardEls.get(c.id);
+  if (!entry) {
+    entry = { el: document.createElement('div'), sig: null };
+    entry.el.dataset.id = c.id;
+    cardEls.set(c.id, entry);
   }
-  const mark = open ? `<div class="mark">${c.ok ? '✔' : '✘'}</div>` : '';
-  el.innerHTML = owner + num + words + mark;
+  const el = entry.el;
+
+  if (entry.sig !== sig) {
+    entry.sig = sig;
+    el.className = 'icard ' + (open ? `open ${c.ok ? 'ok' : 'ng'}` : mine ? 'front' : 'back');
+    if (s.phase === 'arrange') el.classList.add('draggable');
+    if (open && i >= prevRevealed) el.classList.add('flip');
+
+    const owner = `<div class="owner">${mine ? 'あなた' : esc(c.ownerName)}</div>`;
+    const num = `<div class="num">${c.value ?? '?'}</div>`;
+    let words;
+    if (editable) {
+      words = `<textarea data-card="${c.id}" maxlength="30" placeholder="ここに書き込む&#10;(お題に沿った言葉)"></textarea>`;
+    } else {
+      words = c.hint ? `<div class="words">${esc(c.hint)}</div>` : `<div class="words empty">（まだ書いていません）</div>`;
+    }
+    const mark = open ? `<div class="mark">${c.ok ? '✔' : '✘'}</div>` : '';
+    el.innerHTML = owner + num + words + mark;
+
+    const ta = el.querySelector('textarea');
+    if (ta) {
+      ta.value = c.hint;
+      ta.addEventListener('compositionstart', () => (ta.composing = true));
+      ta.addEventListener('compositionend', () => {
+        ta.composing = false;
+        sendHint(c.id, ta.value);
+      });
+      ta.addEventListener('input', (e) => {
+        if (e.isComposing || ta.composing) return; // 変換中は送らない
+        sendHint(c.id, ta.value);
+      });
+      ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+          e.preventDefault();
+          ta.blur();
+        }
+      });
+      ta.addEventListener('blur', () => sendHint(c.id, ta.value, 0));
+    }
+  }
+
+  // 自分が触っていない時だけサーバーの内容を反映
+  const ta = el.querySelector('textarea');
+  if (ta && document.activeElement !== ta && !hintTimers[c.id] && ta.value !== c.hint) ta.value = c.hint;
   return el;
 }
 
@@ -207,32 +249,23 @@ function render() {
   $('instruction').innerHTML = instr[s.phase] || '';
   show('instruction', !!instr[s.phase]);
 
-  // 書き込み中のカードはフォーカスと入力内容を保つ
-  const active = document.activeElement;
-  let keep = null;
-  if (active && active.dataset && active.dataset.card) {
-    keep = { id: active.dataset.card, value: active.value, start: active.selectionStart, end: active.selectionEnd };
-  }
-
+  // カードを並び順どおりに配置（既存のDOMは作り直さず、位置だけ合わせる）
   const line = $('line');
-  line.innerHTML = '';
-  s.cards.forEach((c, i) => line.appendChild(cardEl(c, i, s)));
-  sortable.option('disabled', s.phase !== 'arrange');
-
-  line.querySelectorAll('textarea[data-card]').forEach((ta) => {
-    ta.addEventListener('input', () => sendHint(ta.dataset.card, ta.value));
-    ta.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.isComposing) {
-        e.preventDefault();
-        ta.blur();
-      }
-    });
-    if (keep && keep.id === ta.dataset.card) {
-      ta.value = keep.value;
-      ta.focus();
-      ta.setSelectionRange(keep.start, keep.end);
+  const active = document.activeElement;
+  const ids = new Set(s.cards.map((c) => c.id));
+  for (const [id, entry] of cardEls) {
+    if (!ids.has(id)) {
+      entry.el.remove();
+      cardEls.delete(id);
     }
+  }
+  s.cards.forEach((c, i) => {
+    const el = updateCard(c, i, s);
+    if (line.children[i] !== el) line.insertBefore(el, line.children[i] || null);
   });
+  while (line.children.length > s.cards.length) line.lastChild.remove();
+  if (active && active.dataset && active.dataset.card && document.activeElement !== active && active.isConnected) active.focus();
+  sortable.option('disabled', s.phase !== 'arrange');
   prevRevealed = s.revealed;
 
   // OKボタン

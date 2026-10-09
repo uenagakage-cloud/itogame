@@ -130,7 +130,7 @@ function startRound(room) {
   room.players.forEach((p) => {
     p.ready = false;
     for (let k = 0; k < room.settings.cardsPerPlayer; k++) {
-      room.cards.push({ id: `c${++n}`, value: deck.pop(), ownerId: p.id, hint: '' });
+      room.cards.push({ id: `${Date.now().toString(36)}-${++n}`, value: deck.pop(), ownerId: p.id, hint: '' });
     }
   });
   shuffle(room.cards);
@@ -245,7 +245,9 @@ io.on('connection', (socket) => {
     if (!room || !player || room.phase !== 'arrange') return;
     const c = room.cards.find((x) => x.id === cardId);
     if (!c || c.ownerId !== player.id) return;
-    c.hint = String(hint || '').slice(0, 30);
+    const next = String(hint || '').slice(0, 30);
+    if (next === c.hint) return;
+    c.hint = next;
     resetReady(room);
     broadcast(room);
   });
