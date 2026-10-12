@@ -36,7 +36,8 @@ function getName() {
 
 $('createBtn').onclick = () => {
   const name = getName();
-  if (name) socket.emit('create', { playerId, name });
+  const isPublic = document.querySelector('input[name="visibility"]:checked').value === 'public';
+  if (name) socket.emit('create', { playerId, name, isPublic });
 };
 $('joinBtn').onclick = () => {
   const name = getName();
@@ -67,6 +68,7 @@ $('customThemeBtn').onclick = () => {
   socket.emit('customTheme', $('customTheme').value);
   $('customTheme').value = '';
 };
+$('setPublic').addEventListener('change', () => socket.emit('setPublic', $('setPublic').checked));
 $('setCards').addEventListener('change', () => socket.emit('updateSettings', { cardsPerPlayer: $('setCards').value }));
 $('readyBtn').onclick = () => {
   const me = state.players.find((p) => p.id === playerId);
@@ -119,7 +121,33 @@ function goHome() {
   $('home').classList.remove('hidden');
   $('game').classList.add('hidden');
   $('roomInfo').classList.add('hidden');
+  socket.emit('watchRooms');
 }
+
+// 公開ルーム一覧
+socket.on('roomList', (list) => {
+  const ul = $('publicRooms');
+  ul.innerHTML = '';
+  if (list.length === 0) {
+    ul.innerHTML = '<li class="muted">今は公開ルームがありません。部屋を作ってみよう！</li>';
+    return;
+  }
+  list.forEach((r) => {
+    const li = document.createElement('li');
+    const full = r.count >= r.max;
+    li.innerHTML = `<span class="room-host">${esc(r.host)} の部屋</span>
+      <span class="room-meta">${r.count}/${r.max}人・${r.playing ? 'プレイ中' : '募集中'}</span>`;
+    const b = document.createElement('button');
+    b.textContent = full ? '満員' : r.playing ? 'プレイ中' : '参加';
+    b.disabled = full || r.playing;
+    b.onclick = () => {
+      const name = getName();
+      if (name) socket.emit('join', { code: r.code, playerId, name });
+    };
+    li.appendChild(b);
+    ul.appendChild(li);
+  });
+});
 
 socket.on('connect', () => {
   // リロード・再接続時に自動で部屋へ戻る
@@ -229,6 +257,10 @@ function render() {
   show('resultBar', s.phase === 'result');
 
   // ロビー
+  $('setPublic').checked = s.isPublic;
+  $('setPublic').disabled = !host;
+  $('visBadge').textContent = s.isPublic ? '公開' : '非公開';
+  $('visBadge').classList.toggle('private', !s.isPublic);
   $('setCards').value = s.settings.cardsPerPlayer;
   $('setCards').disabled = !host;
   $('startBtn').disabled = s.players.length < 2;

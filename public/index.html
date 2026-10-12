@@ -10,6 +10,7 @@
   <header>
     <h1>ito <span>online</span></h1>
     <div id="roomInfo" class="hidden">
+      <span id="visBadge" class="badge"></span>
       部屋コード <b id="roomCode"></b>
       <button id="copyLink" class="small">招待リンクをコピー</button>
       <button id="leaveBtn" class="small ghost">退出</button>
@@ -29,10 +30,19 @@
         <li>全員が「この順番でOK」を押したら答え合わせ！</li>
       </ol>
       <label>名前 <input id="nameInput" maxlength="16" placeholder="あなたの名前" /></label>
+      <div class="visibility">
+        <label class="radio"><input type="radio" name="visibility" value="public" checked /> 公開ルーム <span class="muted">（一覧に表示され、誰でも入れる）</span></label>
+        <label class="radio"><input type="radio" name="visibility" value="private" /> 非公開ルーム <span class="muted">（コードを知っている人だけ）</span></label>
+      </div>
       <button id="createBtn" class="primary">部屋を作る</button>
       <div class="divider">または</div>
       <label>部屋コード <input id="codeInput" maxlength="4" placeholder="ABCD" style="text-transform:uppercase" /></label>
       <button id="joinBtn">部屋に参加</button>
+    </section>
+
+    <section class="card narrow">
+      <h2>公開ルーム</h2>
+      <ul id="publicRooms" class="room-list"></ul>
     </section>
   </main>
 
@@ -44,6 +54,7 @@
         <section id="lobbyPanel" class="card hidden">
           <h2>ロビー</h2>
           <p class="muted">友達に部屋コードか招待リンクを送ってね（2〜10人）</p>
+          <label class="setting radio"><input id="setPublic" type="checkbox" /> 公開ルームにする <span class="muted">（トップ画面の一覧に表示）</span></label>
           <label class="setting">1人あたりのカード枚数 <input id="setCards" type="number" min="1" max="5" /></label>
           <button id="startBtn" class="primary hostOnly">ゲーム開始</button>
           <p class="muted guestOnly">ホストの開始を待っています…</p>

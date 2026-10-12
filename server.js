@@ -41,10 +41,11 @@ function pickTheme(room) {
   return room.themeDeck.pop();
 }
 
-function createRoom(hostId) {
+function createRoom(hostId, isPublic) {
   const room = {
     code: makeRoomCode(),
     hostId,
+    isPublic: !!isPublic, // 公開ルームはトップ画面の一覧に表示される
     players: [], // { id, name, connected, ready }
     phase: 'lobby', // lobby | arrange | reveal | result
     settings: { cardsPerPlayer: 1 },
@@ -78,6 +79,7 @@ function publicState(room, viewerId) {
   return {
     code: room.code,
     hostId: room.hostId,
+    isPublic: room.isPublic,
     phase: room.phase,
     settings: room.settings,
     round: room.round,
@@ -115,6 +117,30 @@ function broadcast(room) {
   for (const p of room.players) {
     if (p.socketId) io.to(p.socketId).emit('state', publicState(room, p.id));
   }
+  scheduleRoomList();
+}
+
+// トップ画面にいる人へ公開ルーム一覧を配信（変更が続いても少しまとめて送る）
+const HOME = 'home';
+function roomList() {
+  return [...rooms.values()]
+    .filter((r) => r.isPublic && r.players.some((p) => p.connected))
+    .map((r) => ({
+      code: r.code,
+      host: playerName(r, r.hostId),
+      count: r.players.length,
+      max: MAX_PLAYERS,
+      playing: r.phase !== 'lobby',
+    }))
+    .sort((a, b) => a.playing - b.playing);
+}
+let roomListTimer = null;
+function scheduleRoomList() {
+  if (roomListTimer) return;
+  roomListTimer = setTimeout(() => {
+    roomListTimer = null;
+    io.to(HOME).emit('roomList', roomList());
+  }, 300);
 }
 
 function stopReveal(room) {
@@ -171,6 +197,9 @@ io.on('connection', (socket) => {
 
   const err = (msg) => socket.emit('errorMsg', msg);
 
+  socket.join(HOME);
+  socket.emit('roomList', roomList());
+
   function attach(r, playerId, name) {
     let p = r.players.find((x) => x.id === playerId);
     if (!p) {
@@ -189,13 +218,14 @@ io.on('connection', (socket) => {
     room = r;
     player = p;
     socket.join(r.code);
+    socket.leave(HOME);
     socket.emit('joined', { code: r.code, playerId });
     broadcast(r);
   }
 
-  socket.on('create', ({ playerId, name }) => {
+  socket.on('create', ({ playerId, name, isPublic }) => {
     if (!playerId || !name) return err('名前を入力してください');
-    const r = createRoom(playerId);
+    const r = createRoom(playerId, isPublic);
     attach(r, playerId, String(name).slice(0, 16));
   });
 
@@ -212,6 +242,19 @@ io.on('connection', (socket) => {
     if (!isHost() || room.phase !== 'lobby') return;
     const cards = Math.min(5, Math.max(1, parseInt(s.cardsPerPlayer, 10) || 1));
     room.settings = { cardsPerPlayer: cards };
+    broadcast(room);
+  });
+
+  socket.on('watchRooms', () => {
+    if (room) return;
+    socket.join(HOME);
+    socket.emit('roomList', roomList());
+  });
+
+  socket.on('setPublic', (isPublic) => {
+    if (!isHost()) return;
+    room.isPublic = !!isPublic;
+    addLog(room, room.isPublic ? '公開ルームに変更しました' : '非公開ルームに変更しました');
     broadcast(room);
   });
 
@@ -331,6 +374,8 @@ io.on('connection', (socket) => {
       player.socketId = null;
     }
     socket.leave(r.code);
+    socket.join(HOME);
+    socket.emit('roomList', roomList());
     handleHostChange(r);
     room = null;
     player = null;
@@ -366,6 +411,7 @@ setInterval(() => {
     if (room.players.length === 0 || (room.emptySince && now - room.emptySince > ROOM_TTL_MS)) {
       stopReveal(room);
       rooms.delete(code);
+      scheduleRoomList();
     }
   }
 }, 60 * 1000);
