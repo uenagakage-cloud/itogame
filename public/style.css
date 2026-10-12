@@ -254,3 +254,9 @@ label.radio input { width: auto; margin: 0; }
 .room-list .room-host { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-list .room-meta { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 .badge.private { background: var(--muted); }
+
+.genre-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.genre-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; background: var(--bg); }
+.genre-chip input { width: auto; margin: 0; }
+.genre-chip.on { border-color: var(--accent2); background: color-mix(in srgb, var(--accent2) 15%, var(--surface)); }
+.genre-chip.disabled { cursor: default; opacity: 0.8; }

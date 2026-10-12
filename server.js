@@ -2,7 +2,9 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const THEMES = require('./themes');
+const GENRES = require('./themes');
+const GENRE_KEYS = GENRES.map((g) => g.key);
+const GENRE_INFO = GENRES.map((g) => ({ key: g.key, name: g.name, count: g.themes.length }));
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -36,8 +38,13 @@ function shuffle(arr) {
   return arr;
 }
 
+// 選ばれたジャンルのお題をまとめてシャッフル
+function buildDeck(genreKeys) {
+  return shuffle(GENRES.filter((g) => genreKeys.includes(g.key)).flatMap((g) => g.themes));
+}
+
 function pickTheme(room) {
-  if (room.themeDeck.length === 0) room.themeDeck = shuffle(THEMES.slice());
+  if (room.themeDeck.length === 0) room.themeDeck = buildDeck(room.settings.genres);
   return room.themeDeck.pop();
 }
 
@@ -48,11 +55,11 @@ function createRoom(hostId, isPublic) {
     isPublic: !!isPublic, // 公開ルームはトップ画面の一覧に表示される
     players: [], // { id, name, connected, ready }
     phase: 'lobby', // lobby | arrange | reveal | result
-    settings: { cardsPerPlayer: 1 },
+    settings: { cardsPerPlayer: 1, genres: GENRE_KEYS.slice() },
     round: 0,
     wins: 0,
     theme: null,
-    themeDeck: shuffle(THEMES.slice()),
+    themeDeck: buildDeck(GENRE_KEYS),
     cards: [], // 並び順そのもの。{ id, value, ownerId, hint }
     revealed: 0, // 左から何枚めくったか
     revealTimer: null,
@@ -82,6 +89,7 @@ function publicState(room, viewerId) {
     isPublic: room.isPublic,
     phase: room.phase,
     settings: room.settings,
+    genres: GENRE_INFO,
     round: room.round,
     wins: room.wins,
     theme: room.theme,
@@ -241,7 +249,10 @@ io.on('connection', (socket) => {
   socket.on('updateSettings', (s) => {
     if (!isHost() || room.phase !== 'lobby') return;
     const cards = Math.min(5, Math.max(1, parseInt(s.cardsPerPlayer, 10) || 1));
-    room.settings = { cardsPerPlayer: cards };
+    let genres = Array.isArray(s.genres) ? GENRE_KEYS.filter((k) => s.genres.includes(k)) : room.settings.genres;
+    if (genres.length === 0) genres = room.settings.genres; // 最低1ジャンルは残す
+    if (genres.join() !== room.settings.genres.join()) room.themeDeck = buildDeck(genres);
+    room.settings = { cardsPerPlayer: cards, genres };
     broadcast(room);
   });
 

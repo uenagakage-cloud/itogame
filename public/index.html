@@ -55,6 +55,10 @@
           <h2>ロビー</h2>
           <p class="muted">友達に部屋コードか招待リンクを送ってね（2〜10人）</p>
           <label class="setting radio"><input id="setPublic" type="checkbox" /> 公開ルームにする <span class="muted">（トップ画面の一覧に表示）</span></label>
+          <div class="setting">
+            <div class="label">お題のジャンル（複数選択できます）</div>
+            <div id="genreList" class="genre-list"></div>
+          </div>
           <label class="setting">1人あたりのカード枚数 <input id="setCards" type="number" min="1" max="5" /></label>
           <button id="startBtn" class="primary hostOnly">ゲーム開始</button>
           <p class="muted guestOnly">ホストの開始を待っています…</p>

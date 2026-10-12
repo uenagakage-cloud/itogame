@@ -69,7 +69,16 @@ $('customThemeBtn').onclick = () => {
   $('customTheme').value = '';
 };
 $('setPublic').addEventListener('change', () => socket.emit('setPublic', $('setPublic').checked));
-$('setCards').addEventListener('change', () => socket.emit('updateSettings', { cardsPerPlayer: $('setCards').value }));
+function sendSettings() {
+  const genres = [...document.querySelectorAll('#genreList input:checked')].map((el) => el.value);
+  if (genres.length === 0) {
+    toast('ジャンルは1つ以上選んでください');
+    render();
+    return;
+  }
+  socket.emit('updateSettings', { cardsPerPlayer: $('setCards').value, genres });
+}
+$('setCards').addEventListener('change', sendSettings);
 $('readyBtn').onclick = () => {
   const me = state.players.find((p) => p.id === playerId);
   if (!me.ready) {
@@ -262,6 +271,16 @@ function render() {
   $('visBadge').textContent = s.isPublic ? '公開' : '非公開';
   $('visBadge').classList.toggle('private', !s.isPublic);
   $('setCards').value = s.settings.cardsPerPlayer;
+  const gl = $('genreList');
+  gl.innerHTML = '';
+  s.genres.forEach((g) => {
+    const on = s.settings.genres.includes(g.key);
+    const label = document.createElement('label');
+    label.className = 'genre-chip' + (on ? ' on' : '') + (host ? '' : ' disabled');
+    label.innerHTML = `<input type="checkbox" value="${g.key}" ${on ? 'checked' : ''} ${host ? '' : 'disabled'} /> ${esc(g.name)} <span class="muted">${g.count}</span>`;
+    label.querySelector('input').addEventListener('change', sendSettings);
+    gl.appendChild(label);
+  });
   $('setCards').disabled = !host;
   $('startBtn').disabled = s.players.length < 2;
 
